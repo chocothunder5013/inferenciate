@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package inference;
 
-service InferenceService {
-  // Old single method (keep for backward compatibility if you want)
-  rpc Predict (InferenceRequest) returns (InferenceResponse);
+option java_multiple_files = true;
+option java_package = "inference";
 
-  // NEW: Batch Method
+service InferenceService {
+  rpc Predict (InferenceRequest) returns (InferenceResponse);
   rpc PredictBatch (BatchInferenceRequest) returns (BatchInferenceResponse);
 }
 
@@ -22,14 +22,12 @@ message InferenceResponse {
   int64 execution_time_ms = 4;
 }
 
-// --- NEW MESSAGES ---
-
 message BatchInferenceRequest {
   string batch_id = 1;
-  repeated InferenceRequest requests = 2; // List of images
+  repeated InferenceRequest requests = 2;
 }
 
 message BatchInferenceResponse {
   string batch_id = 1;
-  repeated InferenceResponse responses = 2; // List of results
+  repeated InferenceResponse responses = 2;
 }

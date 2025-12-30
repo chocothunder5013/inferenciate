@@ -1,7 +1,7 @@
 package com.distsys.manager;
 
-import inference.Inference.InferenceRequest;
-import inference.Inference.InferenceResponse;
+import inference.InferenceRequest;
+import inference.InferenceResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -18,7 +18,6 @@ import java.util.concurrent.TimeoutException;
 
 public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
-    // Singleton Scheduler (Lazy loaded) to manage the batching queue across all connections
     private static BatchScheduler scheduler;
     private final ChannelGroup activeWebSockets;
     private final ClusterClient clusterClient;
@@ -27,7 +26,6 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
         this.clusterClient = clusterClient;
         this.activeWebSockets = activeWebSockets;
         
-        // Initialize the scheduler if it doesn't exist yet
         synchronized (HttpJobHandler.class) {
             if (scheduler == null) {
                 System.out.println("[Manager] Initializing Smart Batch Scheduler...");
@@ -38,23 +36,19 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
-        // 1. Pass WebSocket Handshakes
         if (req.uri().equals("/ws")) {
             ctx.fireChannelRead(req.retain());
             return;
         }
 
-        // 2. Handle CORS
         if (req.method().equals(HttpMethod.OPTIONS)) {
             sendCorsResponse(ctx);
             return;
         }
 
-        // 3. Handle Job Submission (POST /api/job)
         if (req.method().equals(HttpMethod.POST) && req.uri().equals("/api/job")) {
             handleJobSubmission(ctx, req);
         } else {
-            // 404 for everything else
             ctx.writeAndFlush(new DefaultFullHttpResponse(req.protocolVersion(), HttpResponseStatus.NOT_FOUND));
         }
     }
@@ -64,33 +58,24 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
         String jobId = "job-" + startTime;
 
         try {
-            // A. Read the raw image bytes
             ByteBuf content = req.content();
             byte[] imageBytes = new byte[content.readableBytes()];
             content.readBytes(imageBytes);
 
-            // B. Create the Proto Request
             InferenceRequest grpcReq = InferenceRequest.newBuilder()
                     .setRequestId(jobId)
                     .setImageData(com.google.protobuf.ByteString.copyFrom(imageBytes))
                     .build();
 
-            // C. Submit to Batch Scheduler (Async)
-            // This puts the job in the queue. The Scheduler will pack it and send it when ready.
             Future<InferenceResponse> future = scheduler.submit(grpcReq);
-
-            // D. Wait for the result (Blocking this Netty thread briefly)
-            // In a production non-blocking system, you would use listeners, but this is fine for now.
             InferenceResponse grpcResp = future.get(5, TimeUnit.SECONDS);
 
-            // E. Broadcast to Dashboard
             if (activeWebSockets != null) {
                 String logMessage = String.format("[System] Job %s Completed via Batching in %dms (Conf: %.2f%%)",
                         jobId, grpcResp.getExecutionTimeMs(), grpcResp.getConfidenceScore() * 100);
                 activeWebSockets.writeAndFlush(new TextWebSocketFrame(logMessage));
             }
 
-            // F. Send HTTP Response
             String resultJson = String.format("{\"label\": \"%s\", \"confidence\": %.2f}",
                     grpcResp.getClassLabel(), grpcResp.getConfidenceScore());
             
