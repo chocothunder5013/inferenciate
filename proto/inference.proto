@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package inference;
+
+// The interface the C++ Worker will implement and the Java Manager will call.
+service InferenceService {
+  // Sends an image payload and returns the classification
+  rpc Predict (InferenceRequest) returns (InferenceResponse) {}
+}
+
+message InferenceRequest {
+  string request_id = 1;      // To track the job through the system
+  bytes image_data = 2;       // Raw image bytes (e.g., JPEG or raw tensor data)
+  int32 width = 3;            // Image dimensions
+  int32 height = 4;
+  int32 channels = 5;         // e.g., 3 for RGB
+}
+
+message InferenceResponse {
+  string request_id = 1;
+  string class_label = 2;     // e.g., "Golden Retriever"
+  float confidence_score = 3; // e.g., 0.98
+  int64 execution_time_ms = 4;// Useful for monitoring performance
+}

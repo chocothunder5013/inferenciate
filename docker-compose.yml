@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # 1. The Brain (Java Manager)
+  manager:
+    image: gridmind-manager
+    ports:
+      - "8080:8080"      # HTTP API
+      - "9999:9999/udp"  # Gossip Protocol
+    environment:
+      - WORKER_TARGET=worker:50051 # "worker" is the DNS hostname defined below
+    depends_on:
+      - worker
+    networks:
+      - grid-net
+
+  # 2. The Muscle (C++ Worker or Python Mock)
+  worker:
+    image: gridmind-worker
+    ports:
+      - "50051:50051"
+    networks:
+      - grid-net
+
+  # 3. (Optional) The Dashboard
+  # You can containerize the frontend too, or just run it on host for dev.
+  # dashboard:
+  #   build: ./dashboard
+  #   ports:
+  #     - "5173:5173"
+  #   networks:
+  #     - grid-net
+
+networks:
+  grid-net:
+    driver: bridge

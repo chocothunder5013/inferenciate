@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package inference;
+
+service InferenceService {
+  // Old single method (keep for backward compatibility if you want)
+  rpc Predict (InferenceRequest) returns (InferenceResponse);
+
+  // NEW: Batch Method
+  rpc PredictBatch (BatchInferenceRequest) returns (BatchInferenceResponse);
+}
+
+message InferenceRequest {
+  string request_id = 1;
+  bytes image_data = 2;
+}
+
+message InferenceResponse {
+  string request_id = 1;
+  string class_label = 2;
+  float confidence_score = 3;
+  int64 execution_time_ms = 4;
+}
+
+// --- NEW MESSAGES ---
+
+message BatchInferenceRequest {
+  string batch_id = 1;
+  repeated InferenceRequest requests = 2; // List of images
+}
+
+message BatchInferenceResponse {
+  string batch_id = 1;
+  repeated InferenceResponse responses = 2; // List of results
+}
