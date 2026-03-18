@@ -1,22 +1,21 @@
-# Build Stage
-FROM maven:3.9-eclipse-temurin-17 AS build
+# Stage 1: Build the Java App (Heavy)
+FROM maven:3.9-eclipse-temurin-17 AS builder
 WORKDIR /app
 
-# Copy pom.xml and cache dependencies
-COPY pom.xml .
-RUN mvn dependency:go-offline
+# Pull from the manager/ prefix now
+COPY manager/pom.xml .
+RUN mvn dependency:go-offline 
+COPY manager/src ./src
 
-# Copy source and build the Fat JAR
-COPY src ./src
-RUN mvn package -DskipTests
+# COPY THE PROTO FOLDER! 
+# Placed at /proto, so Maven looking for /app/../proto finds it instantly.
+COPY proto /proto
 
-# Runtime Stage
+RUN mvn clean package -DskipTests
+
+# Stage 2: Run the Java App (Lightweight)
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
-
-# Copy the generated JAR (Shade plugin usually names it with the original name)
-# Using a wildcard is okay, but ensure only one jar is in target/ 
-COPY --from=build /app/target/*.jar app.jar
-
-EXPOSE 8080 9999
-CMD ["java", "-jar", "app.jar"]
+COPY --from=builder /app/target/manager-1.0-SNAPSHOT.jar manager.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "manager.jar"]

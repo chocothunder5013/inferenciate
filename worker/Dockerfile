@@ -1,44 +1,34 @@
-# Build Stage
-FROM ubuntu:22.04 AS build
-
-# Install build tools and vcpkg dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential cmake git curl zip unzip tar pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install vcpkg
-WORKDIR /opt
-RUN git clone https://github.com/microsoft/vcpkg.git
-RUN ./vcpkg/bootstrap-vcpkg.sh
-
-# Copy Source
-WORKDIR /app
-COPY vcpkg.json .
-COPY CMakeLists.txt .
-COPY src ./src
-COPY proto ../proto
-
-# Build with Dynamic Linking
-RUN mkdir build && cd build && \
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake \
-             -DVCPKG_TARGET_TRIPLET=x64-linux-dynamic && \
-    make -j4
-
-# Runtime Stage
 FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
 
-WORKDIR /app
+# 1. Install EVERYTHING the worker needs to build and run
+RUN apt-get update && apt-get install -y \
+    build-essential cmake git pkg-config curl wget unzip tar \
+    protobuf-compiler protobuf-compiler-grpc \
+    libprotobuf-dev libgrpc++-dev libgrpc-dev libgomp1 ca-certificates
 
-# We need to copy the compiled binary AND the shared libraries from vcpkg
-COPY --from=build /app/build/worker_node .
-COPY --from=build /app/build/resnet50-v2-7.onnx . 
-# NOTE: In a real prod env, you'd verify exact library paths. 
-# For now, we rely on vcpkg's local install folder in the build stage
-COPY --from=build /app/build/vcpkg_installed/x64-linux-dynamic/lib /usr/local/lib
+WORKDIR /build
 
-# Ensure the OS finds the libraries
-RUN ldconfig
+# 2. Install ONNX Runtime & STB Image
+RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz && \
+    tar -zxvf onnxruntime-linux-x64-1.16.3.tgz && \
+    cp -r onnxruntime-linux-x64-1.16.3/include/* /usr/local/include/ && \
+    cp -r onnxruntime-linux-x64-1.16.3/lib/* /usr/local/lib/ && \
+    ldconfig
+
+# NEW: Download stb_image.h directly into the system include path
+RUN wget https://raw.githubusercontent.com/nothings/stb/master/stb_image.h -O /usr/local/include/stb_image.h
+
+# 3. Copy our code (Removed vcpkg.json since we aren't using it)
+COPY worker/CMakeLists.txt ./
+COPY worker/src ./src
+COPY proto ./proto
+
+# 4. Build the binary
+RUN cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+RUN cmake --build build -j4
 
 EXPOSE 50051
 
-CMD ["./worker_node"]
+# 5. Run the binary directly from the build folder
+ENTRYPOINT ["/build/build/worker_node"]

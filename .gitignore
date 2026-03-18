@@ -1,5 +1,28 @@
-build/
-target/
-node_modules/
+# --- OS & IDE ---
 .DS_Store
-vcpkg_installed/
+.idea/
+.vscode/
+*.swp
+
+# --- Dashboard (Node/React/Vite) ---
+dashboard/node_modules/
+dashboard/dist/
+dashboard/npm-debug.log*
+
+# --- Manager (Java/Maven) ---
+manager/target/
+manager/dependency-reduced-pom.xml
+*.jar
+
+# --- Worker (C++/CMake/vcpkg) ---
+worker/build/
+worker/vcpkg_installed/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.out
+
+# --- Python (Mock Worker) ---
+__pycache__/
+*.pyc
+venv/

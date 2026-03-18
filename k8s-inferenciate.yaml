@@ -1,0 +1,91 @@
+# -------------------------------------------------
+# 1. The Headless Service (For K8s DNS Discovery)
+# -------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferenciate-worker-headless
+spec:
+  clusterIP: None # This makes it "Headless" - K8s returns Pod IPs directly
+  selector:
+    app: inferenciate-worker
+  ports:
+    - protocol: TCP
+      port: 50051
+
+---
+# -------------------------------------------------
+# 2. Worker Deployment (The C++ Muscle)
+# -------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferenciate-worker-cluster
+spec:
+  replicas: 3 # Scale this up to handle more image throughput
+  selector:
+    matchLabels:
+      app: inferenciate-worker
+  template:
+    metadata:
+      labels:
+        app: inferenciate-worker
+    spec:
+      containers:
+        - name: worker-node
+          image: inferenciate-worker:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50051
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits: # C++ ONNX will use exactly what you give it
+              cpu: "2000m"
+              memory: "2Gi"
+
+---
+# -------------------------------------------------
+# 3. Manager Deployment (The Java Brain)
+# -------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferenciate-manager-cluster
+spec:
+  replicas: 2 # Scale this up to handle more HTTP traffic
+  selector:
+    matchLabels:
+      app: inferenciate-manager
+  template:
+    metadata:
+      labels:
+        app: inferenciate-manager
+    spec:
+      containers:
+        - name: manager-node
+          image: inferenciate-manager:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: WORKER_SERVICE_NAME
+              value: "inferenciate-worker-headless" # Matches the Headless Service name above
+
+---
+# -------------------------------------------------
+# 4. Public API Gateway (Load Balancer)
+# -------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferenciate-api
+spec:
+  selector:
+    app: inferenciate-manager
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080

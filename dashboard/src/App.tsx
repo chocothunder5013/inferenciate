@@ -1,25 +1,61 @@
-import { useEffect, useState, useRef } from 'react';
-import './App.css';
-import { SystemMonitor } from './components/SystemMonitor';
-import { ImageUploader } from './components/ImageUploader'; // <--- Import this
+import { useEffect, useState, useRef } from "react";
+import { Activity, Server, Radio } from "lucide-react";
+import { SystemMonitor } from "./components/SystemMonitor";
+import type { RealTelemetry } from "./types";
+import { ImageUploader } from "./components/ImageUploader";
+import { ClusterTopology } from "./components/ClusterTopology";
+import { AuditLog } from "./components/AuditLog";
+import { ChaosControl } from "./components/ChaosControl";
 
 function App() {
-  const [logs, setLogs] = useState<string[]>([]);
+  const [auditLogs, setAuditLogs] = useState<RealTelemetry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const ws = useRef<WebSocket | null>(null); 
+  const [telemetry, setTelemetry] = useState<RealTelemetry | null>(null);
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const ws = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080/ws');
-    ws.current = socket;
+ useEffect(() => {
+  // Convert http/https from your env var to ws/wss automatically
+  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws`;
+  
+  const socket = new WebSocket(wsUrl);
+  ws.current = socket;
 
     socket.onopen = () => {
-      console.log('Connected to Manager Node');
       setIsConnected(true);
-      socket.send('Dashboard hello!');
+      socket.send("Dashboard hello!");
     };
 
     socket.onmessage = (event) => {
-      setLogs(prev => [event.data, ...prev].slice(0, 50));
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "inference_result") {
+          const newEvent: RealTelemetry = {
+            type: "inference_result",
+            jobId: data.jobId,
+            latencyMs: data.latencyMs,
+            confidence: data.confidence,
+            time: new Date().toLocaleTimeString([], { hour12: false, second: "2-digit", minute: "2-digit" }),
+            label: data.label,
+            workerNode: data.workerNode,
+            queueDepth: data.queueDepth,
+          };
+
+          setTelemetry(newEvent);
+          setAuditLogs((prev) => [newEvent, ...prev].slice(0, 50));
+          
+        } else if (data.type === "topology_update") {
+          // NEW: Catch the topology update and send it to the map!
+          setTelemetry({
+            type: "topology_update",
+            workers: data.workers
+          });
+        }
+      } catch (e) {
+        console.warn("Received non-JSON websocket message:", event.data);
+      }
     };
 
     socket.onclose = () => setIsConnected(false);
@@ -28,44 +64,88 @@ function App() {
   }, []);
 
   return (
-    <div className="App" style={{ backgroundColor: '#1a1a1a', minHeight: '100vh', padding: '20px', color: 'white', textAlign: 'left' }}>
-      <h1>Distributed Inference Dashboard</h1>
-      
-      {/* Grid Layout: Monitor | Uploader | Logs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-        
-        {/* Left Column: Graphs */}
-        <SystemMonitor />
-
-        {/* Right Column: Actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* 1. Uploader */}
-            <ImageUploader />
-
-            {/* 2. Logs */}
-            <div style={{ padding: '20px', border: '1px solid #444', borderRadius: '8px', background: '#222', flexGrow: 1, overflowY: 'auto', maxHeight: '300px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3>Live System Logs</h3>
-                <span style={{ color: isConnected ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>
-                  {isConnected ? '● Connected' : '● Disconnected'}
-                </span>
-              </div>
-              
-              <div style={{ fontFamily: 'monospace', fontSize: '14px', color: '#ccc' }}>
-                {logs.length === 0 ? (
-                  <p style={{ color: '#888' }}>Waiting for logs...</p>
-                ) : (
-                  logs.map((log, i) => (
-                    <div key={i} style={{ borderBottom: '1px solid #333', padding: '4px 0' }}>
-                      {log}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+    <div className="min-h-screen bg-grid-dark p-6 font-sans selection:bg-grid-neon selection:text-white">
+      {/* Header Bar */}
+      <header className="flex items-center justify-between mb-8 border-b border-slate-800 pb-4">
+        <div className="flex items-center gap-3">
+          <Activity className="text-grid-neon w-8 h-8 animate-pulse" />
+          <h1 className="text-3xl font-bold tracking-tight text-white">
+            Inferenciate
+          </h1>
         </div>
 
+        {/* Connection Status Badge */}
+        <div
+          className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
+            isConnected
+              ? "border-grid-success/30 bg-grid-success/10"
+              : "border-grid-alert/30 bg-grid-alert/10"
+          }`}
+        >
+          <Radio
+            className={`w-4 h-4 ${
+              isConnected ? "text-grid-success animate-pulse" : "text-grid-alert"
+            }`}
+          />
+          <span
+            className={`text-sm font-semibold tracking-wide ${
+              isConnected ? "text-grid-success" : "text-grid-alert"
+            }`}
+          >
+            {isConnected ? "CLUSTER ONLINE" : "CONNECTION LOST"}
+          </span>
+        </div>
+      </header>
+
+      {/* Main Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: System Monitor */}
+        <div className="lg:col-span-2 bg-grid-panel border border-slate-700 rounded-xl p-6 shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-grid-neon to-transparent opacity-50"></div>
+          <div className="flex items-center gap-2 mb-6">
+            <Server className="text-grid-neon w-5 h-5" />
+            <h2 className="text-xl font-semibold text-white">
+              Cluster Telemetry
+            </h2>
+          </div>
+
+          <div className="h-[450px] w-full">
+            <SystemMonitor
+              realData={telemetry}
+              selectedWorker={selectedWorker}
+            />
+          </div>
+        </div>
+
+        {/* Right Column: Topology, Uploader, & Chaos */}
+     <div className="flex flex-col gap-6">
+
+       {/* Uploader Panel */}
+       <div className="bg-grid-panel border border-slate-700 rounded-xl p-6 shadow-xl hover:border-grid-neon/50 transition-colors duration-300">
+         <h2 className="text-lg font-semibold text-white mb-4">
+           Submit Inference Job
+         </h2>
+         <ImageUploader />
+       </div>
+
+       {/* ADD THIS: Chaos Load Generator */}
+       <ChaosControl />
+
+       {/* Live Topology Map */}
+       <div className="flex-grow min-h-[300px]">
+         <ClusterTopology
+           latestEvent={telemetry}
+           selectedWorker={selectedWorker}
+           onSelectWorker={setSelectedWorker}
+         />
+       </div>
+     </div>
+      </div>
+
+      {/* Full-width Audit Log at the bottom */}
+      <div className="mt-6 w-full">
+        <AuditLog logs={auditLogs} />
       </div>
     </div>
   );

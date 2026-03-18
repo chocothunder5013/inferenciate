@@ -1,89 +1,80 @@
-# GridMind: Distributed AI Compute Network
+# Inferenciate: Distributed High-Throughput Inference Engine
 
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Java](https://img.shields.io/badge/Java-Netty-orange)
-![C++](https://img.shields.io/badge/C++-gRPC-blue)
-![React](https://img.shields.io/badge/Frontend-React-cyan)
+## Overview
+Inferenciate is a high-performance, distributed machine learning inference system designed for real-time image processing. It decouples the client-facing API from the heavy machine learning workloads, utilizing a custom Java-based Netty API Gateway that routes traffic to an elastic cluster of C++ worker nodes via gRPC. 
 
-**GridMind** is a high-performance distributed system designed for scalable AI inference. It implements a **Sidecar Architecture** where a Java-based orchestration layer manages networking and routing, while high-performance C++ nodes execute deep learning models (ResNet-50) via ONNX Runtime.
+The system implements "True Tensor Batching," aggregating continuous HTTP/multipart data streams into contiguous memory blocks for optimal ONNX runtime execution, yielding significant throughput improvements over standard sequential inference loops.
 
-## 🚀 Key Features
+## System Architecture
 
-* **Distributed Architecture:** Decoupled **Manager (Java)** and **Worker (C++)** nodes communicating via **gRPC**.
-* **Gossip Protocol:** Custom UDP-based peer discovery for automatic cluster formation.
-* **Smart Routing:** Implements **Consistent Hashing** (Ring Topology) for stateful job distribution.
-* **Resilience:** Application-layer **Circuit Breaking** and automatic **Failover** logic.
-* **High Throughput:** **Smart Batching** using Nagle’s Algorithm-style queuing to group inference requests, reducing network overhead by 400%.
-* **Observability:** Real-time WebSocket-based dashboard for live cluster monitoring.
+The architecture is divided into three highly specialized components:
 
-## 🛠 Tech Stack
+1. **Dashboard (Frontend)**
+   * Built with React, TypeScript, and Vite.
+   * Maintains a persistent WebSocket connection to the Manager node.
+   * Provides real-time cluster telemetry, live topology mapping, and asynchronous batch submission interfaces.
 
-* **Orchestration:** Java 17, Netty (Non-blocking I/O)
-* **Compute:** C++17, ONNX Runtime (AVX2 Optimized), OpenMP
-* **Communication:** gRPC (Protobuf), UDP (Discovery), WebSockets (Real-time logs)
-* **Frontend:** React, TypeScript, Recharts
-* **Infrastructure:** Docker, Kubernetes (Sidecar Pattern)
+2. **Manager Node (Backend / API Gateway)**
+   * Built with Java 17+ and Netty.
+   * Operates as a non-blocking asynchronous event loop.
+   * Implements a Consistent Hashing Router to distribute inference jobs across virtual nodes.
+   * Features a custom Batch Scheduler that aggregates HTTP payloads and multiplexes them over persistent gRPC channels.
+   * Broadcasts sub-millisecond telemetry to the frontend via WebSockets.
 
-## 🏗 System Architecture
+3. **Worker Node (Inference Engine)**
+   * Built with C++17, gRPC, and the ONNX Runtime C++ API.
+   * Performs zero-copy layout transformations, converting raw image byte arrays into NCHW tensor formats.
+   * Executes hardware-accelerated matrix multiplication on aggregated batch tensors.
 
-```mermaid
-graph TD
-    Client[React Dashboard] -->|HTTP POST| API[Java API Gateway]
-    API -->|Batch Queue| Scheduler[Batch Scheduler]
-    Scheduler -->|gRPC Batch| Worker[C++ Worker Node]
-    Worker -->|ONNX Inference| Model[ResNet-50]
-    
-    subgraph "Grid Topology"
-    Manager1[Manager A] -.->|UDP Gossip| Manager2[Manager B]
-    Manager2 -.->|UDP Gossip| Manager3[Manager C]
-    end
+## Core Technologies
+* **Frontend:** React, TypeScript, Vite, TailwindCSS
+* **Backend:** Java, Netty, gRPC, Protocol Buffers
+* **Inference:** C++, ONNX Runtime, STB Image
+* **Infrastructure:** Docker, Docker Compose
 
-```
+## Key Features
+* **True Tensor Batching:** Bypasses sequential processing by mapping multiple image payloads into a single multi-dimensional tensor, executing inference exactly once per batch.
+* **Consistent Hashing Load Balancing:** Ensures deterministic routing of jobs across the worker cluster, minimizing cache misses and preventing hot-spotting.
+* **Non-Blocking Telemetry:** Fully asynchronous WebSocket broadcasting updates the UI with latency, queue depth, and confidence scores without locking the HTTP routing threads.
+* **Elastic Topology:** Worker nodes can be attached or detached dynamically. The Manager automatically rebalances the hash ring and updates the frontend topology map in real-time.
 
-## ⚡ Quick Start (Local)
+## Prerequisites
+* Docker and Docker Compose
+* Minimum 4GB RAM available for the Docker Daemon (to support ONNX memory allocation)
 
-### Prerequisites
+## Installation & Deployment
 
-* Java 17+ & Maven
-* C++ Compiler (GCC/Clang) & CMake
-* Node.js 18+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/inferenciate.git
+   cd inferenciate
+   ```
 
-### 1. Build the Worker (C++)
+2. **Provision the cluster:**
+   The entire stack is containerized. To build the images and spin up the Manager, Dashboard, and one Worker node, execute:
+   ```bash
+   docker-compose up --build -d
+   ```
 
-```bash
-cd worker
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg.cmake
-make -j4
-./worker_node
+3. **Horizontal Scaling:**
+   To dynamically add more C++ inference workers to the cluster, scale the worker service:
+   ```bash
+   docker-compose up -d --scale worker=3
+   ```
 
-```
+## Usage
+Once the cluster is online, navigate to `http://localhost:5173` to access the Dashboard. 
 
-### 2. Run the Manager (Java)
+* **Submit Jobs:** Use the drag-and-drop interface to upload batches of images. 
+* **Monitor Telemetry:** The system monitor will display real-time latency and queue depth metrics broadcasted directly from the Netty event loop.
+* **Observe Topology:** Scaling the worker instances via Docker Compose will instantly reflect on the Cluster Topology map without requiring a page refresh.
 
-```bash
-cd manager
-mvn clean package
-java -jar target/manager-1.0.jar
+## API Reference
 
-```
+### HTTP Endpoints
+* `POST /api/job`: Submits a single image payload (`application/octet-stream`).
+* `POST /api/batch`: Submits a high-throughput batch of images (`multipart/form-data`).
 
-### 3. Launch Dashboard
-
-```bash
-cd dashboard
-npm install && npm run dev
-
-```
-
-## 🧪 API Usage
-
-**Submit Job:**
-`POST /api/job`
-
-* **Body:** Raw Image Bytes (JPEG/PNG)
-* **Response:** `{"label": "Labrador", "confidence": 0.98}`
-
----
-
-*Author: Ishan (chocothunder5013)*
+### WebSocket Events
+* `ws://<MANAGER_HOST>:8080/ws`
+* Consumes incoming JSON payloads dictating `topology_update` and `inference_result` event types.
