@@ -9,10 +9,14 @@ interface ClusterTopologyProps {
   onSelectWorker: (workerId: string | null) => void;
 }
 
-export function ClusterTopology({ latestEvent, selectedWorker, onSelectWorker }: ClusterTopologyProps) {
+export function ClusterTopology({
+  latestEvent,
+  selectedWorker,
+  onSelectWorker,
+}: ClusterTopologyProps) {
   const [activeNodes, setActiveNodes] = useState<Record<string, boolean>>({});
   const [liveWorkers, setLiveWorkers] = useState<string[]>([]);
-  
+
   // FIX 1: Track independent timers for each worker so they don't cancel each other out
   const blinkTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -56,7 +60,7 @@ export function ClusterTopology({ latestEvent, selectedWorker, onSelectWorker }:
             Live Topology ({liveWorkers.length} Nodes)
           </h3>
         </div>
-        
+
         <AnimatePresence>
           {selectedWorker && (
             <motion.button
@@ -74,24 +78,31 @@ export function ClusterTopology({ latestEvent, selectedWorker, onSelectWorker }:
 
       {/* FIX 3: Added overflow-x-auto and min-w-full to handle horizontal scaling properly */}
       <div className="flex-grow flex flex-col items-center justify-center gap-8 relative overflow-x-auto pb-4">
-        
-        <motion.div 
-          animate={{ boxShadow: ["0px 0px 0px rgba(6,182,212,0)", "0px 0px 15px rgba(6,182,212,0.3)", "0px 0px 0px rgba(6,182,212,0)"] }}
+        <motion.div
+          animate={{
+            boxShadow: [
+              "0px 0px 0px rgba(6,182,212,0)",
+              "0px 0px 15px rgba(6,182,212,0.3)",
+              "0px 0px 0px rgba(6,182,212,0)",
+            ],
+          }}
           transition={{ duration: 2, repeat: Infinity }}
           className="relative z-10 bg-grid-panel border border-grid-neon/50 rounded-lg p-3 flex flex-col items-center min-w-[120px]"
         >
           <Server className="w-6 h-6 text-grid-neon mb-1" />
-          <span className="text-xs font-bold text-white tracking-widest uppercase">Manager</span>
+          <span className="text-xs font-bold text-white tracking-widest uppercase">
+            Manager
+          </span>
         </motion.div>
 
         <div className="absolute top-[30%] left-0 w-full h-[40%] flex justify-center -z-0 opacity-20 pointer-events-none min-w-full">
           <svg width="100%" height="100%" preserveAspectRatio="none">
             {liveWorkers.map((workerId, index) => {
               const totalWorkers = liveWorkers.length;
-              let targetX = 50; 
+              let targetX = 50;
               if (totalWorkers > 1) {
                 const step = 70 / (totalWorkers - 1);
-                targetX = 15 + (index * step);
+                targetX = 15 + index * step;
               }
               return (
                 <path
@@ -110,13 +121,15 @@ export function ClusterTopology({ latestEvent, selectedWorker, onSelectWorker }:
         {/* FIX 3 part 2: flex-nowrap keeps them in a single line so the wires line up */}
         <div className="flex items-center justify-center gap-4 min-w-full z-10 flex-nowrap">
           {liveWorkers.length === 0 ? (
-             <span className="text-slate-500 font-mono text-xs animate-pulse">Waiting for workers...</span>
+            <span className="text-slate-500 font-mono text-xs animate-pulse">
+              Waiting for workers...
+            </span>
           ) : (
             liveWorkers.map((workerId) => {
               const isProcessing = activeNodes[workerId];
               const isSelected = selectedWorker === workerId;
               const isDimmed = selectedWorker !== null && !isSelected;
-              const shortName = workerId.replace(/\./g, '-').substring(0, 10); 
+              const shortName = workerId.replace(/\./g, "-").substring(0, 10);
 
               return (
                 <motion.button
@@ -126,13 +139,25 @@ export function ClusterTopology({ latestEvent, selectedWorker, onSelectWorker }:
                   animate={{
                     scale: isSelected ? 1.1 : 1,
                     opacity: isDimmed ? 0.4 : 1,
-                    borderColor: isSelected ? "#06b6d4" : isProcessing ? "#10b981" : "#1e293b",
-                    backgroundColor: isSelected ? "rgba(6, 182, 212, 0.15)" : isProcessing ? "rgba(16, 185, 129, 0.1)" : "rgba(15, 23, 42, 0.8)"
+                    borderColor: isSelected
+                      ? "#06b6d4"
+                      : isProcessing
+                        ? "#10b981"
+                        : "#1e293b",
+                    backgroundColor: isSelected
+                      ? "rgba(6, 182, 212, 0.15)"
+                      : isProcessing
+                        ? "rgba(16, 185, 129, 0.1)"
+                        : "rgba(15, 23, 42, 0.8)",
                   }}
                   className={`flex-none w-[100px] border rounded-lg p-3 flex flex-col items-center transition-all duration-300 relative group cursor-pointer hover:border-slate-500`}
                 >
-                  <Cpu className={`w-5 h-5 mb-2 transition-colors ${isSelected ? "text-grid-neon" : isProcessing ? "text-grid-success" : "text-slate-500"}`} />
-                  <span className={`text-[10px] font-mono text-center truncate w-full ${isSelected ? "text-grid-neon font-bold" : "text-slate-300"}`}>
+                  <Cpu
+                    className={`w-5 h-5 mb-2 transition-colors ${isSelected ? "text-grid-neon" : isProcessing ? "text-grid-success" : "text-slate-500"}`}
+                  />
+                  <span
+                    className={`text-[10px] font-mono text-center truncate w-full ${isSelected ? "text-grid-neon font-bold" : "text-slate-300"}`}
+                  >
                     {shortName}
                   </span>
                 </motion.button>

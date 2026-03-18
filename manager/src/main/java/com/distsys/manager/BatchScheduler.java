@@ -168,7 +168,8 @@ public class BatchScheduler {
   }
 
   // NEW: Directly submit a pre-packaged batch from the UI, bypassing the queue
-  public CompletableFuture<BatchInferenceResponse> submitBatch(String workerAddress, BatchInferenceRequest batchReq) {
+  public CompletableFuture<BatchInferenceResponse> submitBatch(
+      String workerAddress, BatchInferenceRequest batchReq) {
     CompletableFuture<BatchInferenceResponse> future = new CompletableFuture<>();
 
     try {

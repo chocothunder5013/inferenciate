@@ -3,7 +3,7 @@ export interface PredictionResult {
   confidence: number;
 }
 
-export type RealTelemetry = 
+export type RealTelemetry =
   | {
       type: "inference_result";
       jobId: string;

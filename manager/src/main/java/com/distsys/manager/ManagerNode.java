@@ -29,7 +29,8 @@ public class ManagerNode {
     if (!workerServiceName.equals("localhost")) {
       // UPDATED: Pass activeWebSockets here
       K8sDiscoveryService discoveryService =
-          new K8sDiscoveryService(workerServiceName, clusterClient, batchScheduler, activeWebSockets);
+          new K8sDiscoveryService(
+              workerServiceName, clusterClient, batchScheduler, activeWebSockets);
       discoveryService.start();
     } else {
       clusterClient.addNode("localhost");

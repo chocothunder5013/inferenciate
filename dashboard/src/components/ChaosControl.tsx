@@ -37,10 +37,10 @@ export function ChaosControl() {
   const startChaos = () => {
     setIsTesting(true);
     setStats({ sent: 0, success: 0, failed: 0 });
-    
+
     // Calculate interval in milliseconds based on Requests Per Second
     const msPerRequest = 1000 / rps;
-    
+
     intervalRef.current = window.setInterval(() => {
       fireRequest();
     }, msPerRequest);
@@ -68,12 +68,14 @@ export function ChaosControl() {
     <div className="bg-[#1a0b14] border border-rose-900/50 rounded-xl p-6 shadow-[0_0_30px_rgba(225,29,72,0.1)] relative overflow-hidden group">
       {/* Warning Stripes Background */}
       <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#e11d48_10px,#e11d48_20px)] pointer-events-none"></div>
-      
+
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-rose-500">
             <Flame className="w-5 h-5 animate-pulse" />
-            <h2 className="text-lg font-bold tracking-widest uppercase">Chaos Test</h2>
+            <h2 className="text-lg font-bold tracking-widest uppercase">
+              Chaos Test
+            </h2>
           </div>
           {isTesting && (
             <div className="flex items-center gap-2 bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-mono font-bold animate-pulse">
@@ -86,7 +88,9 @@ export function ChaosControl() {
           {/* Slider Control */}
           <div>
             <div className="flex justify-between text-xs font-mono text-slate-400 mb-2">
-              <span className="flex items-center gap-1"><Settings2 className="w-3 h-3" /> Target Load</span>
+              <span className="flex items-center gap-1">
+                <Settings2 className="w-3 h-3" /> Target Load
+              </span>
               <span className="text-rose-400 font-bold">{rps} Req / Sec</span>
             </div>
             <input
@@ -120,16 +124,28 @@ export function ChaosControl() {
           {/* Live Stats */}
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-rose-900/30">
             <div className="text-center">
-              <div className="text-[10px] text-slate-500 font-mono uppercase">Dispatched</div>
-              <div className="text-lg font-bold text-white font-mono">{stats.sent}</div>
+              <div className="text-[10px] text-slate-500 font-mono uppercase">
+                Dispatched
+              </div>
+              <div className="text-lg font-bold text-white font-mono">
+                {stats.sent}
+              </div>
             </div>
             <div className="text-center">
-              <div className="text-[10px] text-emerald-500 font-mono uppercase">200 OK</div>
-              <div className="text-lg font-bold text-emerald-400 font-mono">{stats.success}</div>
+              <div className="text-[10px] text-emerald-500 font-mono uppercase">
+                200 OK
+              </div>
+              <div className="text-lg font-bold text-emerald-400 font-mono">
+                {stats.success}
+              </div>
             </div>
             <div className="text-center">
-              <div className="text-[10px] text-rose-500 font-mono uppercase">Failed</div>
-              <div className="text-lg font-bold text-rose-400 font-mono">{stats.failed}</div>
+              <div className="text-[10px] text-rose-500 font-mono uppercase">
+                Failed
+              </div>
+              <div className="text-lg font-bold text-rose-400 font-mono">
+                {stats.failed}
+              </div>
             </div>
           </div>
         </div>

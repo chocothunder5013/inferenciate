@@ -16,7 +16,11 @@ public class APIGateway {
   private final BatchScheduler batchScheduler;
   private final ChannelGroup activeWebSockets;
 
-  public APIGateway(int port, ClusterClient clusterClient, BatchScheduler batchScheduler, ChannelGroup activeWebSockets) {
+  public APIGateway(
+      int port,
+      ClusterClient clusterClient,
+      BatchScheduler batchScheduler,
+      ChannelGroup activeWebSockets) {
     this.port = port;
     this.clusterClient = clusterClient;
     this.batchScheduler = batchScheduler;
@@ -53,15 +57,17 @@ public class APIGateway {
                             activeWebSockets.add(ctx.channel());
 
                             java.util.List<String> workers = clusterClient.getActiveWorkers();
-                            
-                            StringBuilder jsonBuilder = new StringBuilder("{\"type\": \"topology_update\", \"workers\": [");
+
+                            StringBuilder jsonBuilder =
+                                new StringBuilder("{\"type\": \"topology_update\", \"workers\": [");
                             for (int i = 0; i < workers.size(); i++) {
                               jsonBuilder.append("\"").append(workers.get(i)).append("\"");
                               if (i < workers.size() - 1) jsonBuilder.append(",");
                             }
                             jsonBuilder.append("]}");
-                            
-                            ctx.channel().writeAndFlush(new TextWebSocketFrame(jsonBuilder.toString()));
+
+                            ctx.channel()
+                                .writeAndFlush(new TextWebSocketFrame(jsonBuilder.toString()));
                           }
                           super.userEventTriggered(ctx, evt);
                         }

@@ -22,8 +22,8 @@ public class K8sDiscoveryService {
 
   // Updated Constructor
   public K8sDiscoveryService(
-      String workerServiceName, 
-      ClusterClient clusterClient, 
+      String workerServiceName,
+      ClusterClient clusterClient,
       BatchScheduler batchScheduler,
       ChannelGroup activeWebSockets) {
     this.workerServiceName = workerServiceName;
@@ -72,11 +72,13 @@ public class K8sDiscoveryService {
 
             // 3. Broadcast to React Dashboard
             if (topologyChanged && activeWebSockets != null && !activeWebSockets.isEmpty()) {
-              String workersJsonArray = activeWorkers.stream()
-                  .map(w -> "\"" + w + "\"")
-                  .collect(Collectors.joining(", ", "[", "]"));
-                  
-              String wsPayload = "{\"type\": \"topology_update\", \"workers\": " + workersJsonArray + "}";
+              String workersJsonArray =
+                  activeWorkers.stream()
+                      .map(w -> "\"" + w + "\"")
+                      .collect(Collectors.joining(", ", "[", "]"));
+
+              String wsPayload =
+                  "{\"type\": \"topology_update\", \"workers\": " + workersJsonArray + "}";
               activeWebSockets.writeAndFlush(new TextWebSocketFrame(wsPayload));
             }
 

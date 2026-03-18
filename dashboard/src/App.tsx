@@ -14,13 +14,13 @@ function App() {
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
 
- useEffect(() => {
-  // Convert http/https from your env var to ws/wss automatically
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
-  const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws`;
-  
-  const socket = new WebSocket(wsUrl);
-  ws.current = socket;
+  useEffect(() => {
+    // Convert http/https from your env var to ws/wss automatically
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
+    const wsUrl = `${baseUrl.replace(/^http/, "ws")}/ws`;
+
+    const socket = new WebSocket(wsUrl);
+    ws.current = socket;
 
     socket.onopen = () => {
       setIsConnected(true);
@@ -37,7 +37,11 @@ function App() {
             jobId: data.jobId,
             latencyMs: data.latencyMs,
             confidence: data.confidence,
-            time: new Date().toLocaleTimeString([], { hour12: false, second: "2-digit", minute: "2-digit" }),
+            time: new Date().toLocaleTimeString([], {
+              hour12: false,
+              second: "2-digit",
+              minute: "2-digit",
+            }),
             label: data.label,
             workerNode: data.workerNode,
             queueDepth: data.queueDepth,
@@ -45,12 +49,11 @@ function App() {
 
           setTelemetry(newEvent);
           setAuditLogs((prev) => [newEvent, ...prev].slice(0, 50));
-          
         } else if (data.type === "topology_update") {
           // NEW: Catch the topology update and send it to the map!
           setTelemetry({
             type: "topology_update",
-            workers: data.workers
+            workers: data.workers,
           });
         }
       } catch (e) {
@@ -84,7 +87,9 @@ function App() {
         >
           <Radio
             className={`w-4 h-4 ${
-              isConnected ? "text-grid-success animate-pulse" : "text-grid-alert"
+              isConnected
+                ? "text-grid-success animate-pulse"
+                : "text-grid-alert"
             }`}
           />
           <span
@@ -99,7 +104,6 @@ function App() {
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Left Column: System Monitor */}
         <div className="lg:col-span-2 bg-grid-panel border border-slate-700 rounded-xl p-6 shadow-xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-grid-neon to-transparent opacity-50"></div>
@@ -119,28 +123,27 @@ function App() {
         </div>
 
         {/* Right Column: Topology, Uploader, & Chaos */}
-     <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6">
+          {/* Uploader Panel */}
+          <div className="bg-grid-panel border border-slate-700 rounded-xl p-6 shadow-xl hover:border-grid-neon/50 transition-colors duration-300">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Submit Inference Job
+            </h2>
+            <ImageUploader />
+          </div>
 
-       {/* Uploader Panel */}
-       <div className="bg-grid-panel border border-slate-700 rounded-xl p-6 shadow-xl hover:border-grid-neon/50 transition-colors duration-300">
-         <h2 className="text-lg font-semibold text-white mb-4">
-           Submit Inference Job
-         </h2>
-         <ImageUploader />
-       </div>
+          {/* ADD THIS: Chaos Load Generator */}
+          <ChaosControl />
 
-       {/* ADD THIS: Chaos Load Generator */}
-       <ChaosControl />
-
-       {/* Live Topology Map */}
-       <div className="flex-grow min-h-[300px]">
-         <ClusterTopology
-           latestEvent={telemetry}
-           selectedWorker={selectedWorker}
-           onSelectWorker={setSelectedWorker}
-         />
-       </div>
-     </div>
+          {/* Live Topology Map */}
+          <div className="flex-grow min-h-[300px]">
+            <ClusterTopology
+              latestEvent={telemetry}
+              selectedWorker={selectedWorker}
+              onSelectWorker={setSelectedWorker}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Full-width Audit Log at the bottom */}
