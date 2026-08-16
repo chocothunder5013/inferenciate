@@ -15,6 +15,9 @@ import {
 import { Activity, Zap, Target, Clock, Cpu } from "lucide-react";
 import type { RealTelemetry } from "../types";
 
+/**
+ * Data point structure used for rendering Recharts time-series charts.
+ */
 interface TelemetryPoint {
   time: string;
   latencyMs: number;
@@ -22,18 +25,32 @@ interface TelemetryPoint {
   confidence: number;
 }
 
-const MAX_DATA_POINTS = 30; // Increased for a better historical view
+const MAX_DATA_POINTS = 30;
 
+/**
+ * System Monitor Telemetry Dashboard component.
+ * <p>
+ * Renders real-time telemetry charts and aggregated KPI cards for the cluster:
+ * - Rolling 30-second window buffer initialized with baseline zero points.
+ * - Same-second event aggregation (weighted average latency and confidence, incrementing throughput count).
+ * - Real-time Recharts AreaChart (Latency trend with cyan glow gradient).
+ * - Real-time Recharts BarChart (Jobs/sec Throughput).
+ * - Real-time Recharts LineChart (Average Confidence percentage).
+ * - Supports filtering metrics by specific target worker node.
+ * </p>
+ */
 export function SystemMonitor({
   realData,
   selectedWorker,
 }: {
+  /** Incoming real-time telemetry event payload. */
   realData: RealTelemetry | null;
+  /** Optional target worker node IP string for metric filtering. */
   selectedWorker?: string | null;
 }) {
   const [data, setData] = useState<TelemetryPoint[]>([]);
 
-  // Seed the chart with empty data for a smooth initial UI
+  // Seed chart buffer with initial zero points for smooth graph rendering
   useEffect(() => {
     const emptyData = Array.from({ length: MAX_DATA_POINTS }).map((_, i) => ({
       time: new Date(
@@ -50,7 +67,7 @@ export function SystemMonitor({
     setData(emptyData);
   }, []);
 
-  // Process live data
+  // Process and aggregate incoming live telemetry data points into the rolling chart buffer
   useEffect(() => {
     if (realData) {
       if (
@@ -58,7 +75,7 @@ export function SystemMonitor({
         realData.workerNode &&
         realData.workerNode !== selectedWorker
       ) {
-        return; // Ignore this telemetry point because we are filtering!
+        return;
       }
       setData((prev) => {
         const newPoint = {
@@ -70,12 +87,11 @@ export function SystemMonitor({
 
         const lastPoint = prev[prev.length - 1];
         if (lastPoint && lastPoint.time === newPoint.time) {
-          // Aggregate jobs in the same second
+          // Aggregate multiple telemetry points occurring within the same second
           const updatedPrev = [...prev];
           updatedPrev[updatedPrev.length - 1] = {
             ...lastPoint,
             throughput: lastPoint.throughput + 1,
-            // Rolling average for latency and confidence in the same second
             latencyMs: Math.round(
               (lastPoint.latencyMs * lastPoint.throughput +
                 newPoint.latencyMs) /
@@ -89,14 +105,14 @@ export function SystemMonitor({
           return updatedPrev;
         }
 
-        return [...prev.slice(1), newPoint]; // Slide window
+        return [...prev.slice(1), newPoint];
       });
     }
   }, [realData]);
 
-  // Calculate live KPIs based on recent data
+  // Compute rolling average metrics for dashboard KPI cards using useMemo
   const metrics = useMemo(() => {
-    const recent = data.filter((d) => d.throughput > 0); // Only count active seconds
+    const recent = data.filter((d) => d.throughput > 0);
     if (recent.length === 0)
       return { avgLatency: 0, peakThroughput: 0, avgConfidence: 0 };
 
@@ -114,6 +130,7 @@ export function SystemMonitor({
     };
   }, [data]);
 
+  /** Custom tooltip component for Recharts charts displaying metric details. */
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -139,7 +156,7 @@ export function SystemMonitor({
 
   return (
     <div className="w-full h-full flex flex-col gap-4 overflow-y-auto pr-2 pb-4">
-      {/* KPI Stat Cards */}
+      {/* Key Performance Indicator (KPI) summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-2">
         <div className="bg-[#0a0f18] border border-slate-800 rounded-lg p-3 flex items-center gap-3">
           <div className="p-2 bg-cyan-500/10 rounded-md">
@@ -185,7 +202,7 @@ export function SystemMonitor({
         </div>
       </div>
 
-      {/* Chart 1: Inference Latency */}
+      {/* Latency time-series AreaChart panel */}
       <div className="bg-[#0a0f18] border border-slate-800 rounded-xl p-4 shadow-inner flex-grow min-h-[200px]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -194,7 +211,6 @@ export function SystemMonitor({
               Inference Latency Trend
             </h3>
           </div>
-          {/* Live Indicator */}
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
@@ -229,9 +245,7 @@ export function SystemMonitor({
               <YAxis stroke="#475569" fontSize={10} domain={[0, "auto"]} />
               <Tooltip content={<CustomTooltip />} />
               <Area
-                isAnimationActive={
-                  false
-                } /* Disabled for smooth live streaming */
+                isAnimationActive={false}
                 type="monotone"
                 dataKey="latencyMs"
                 name="Latency (ms)"
@@ -245,9 +259,9 @@ export function SystemMonitor({
         </div>
       </div>
 
-      {/* Grid for smaller charts */}
+      {/* Secondary performance charts (Throughput BarChart and Confidence LineChart) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
-        {/* Chart 2: Batch Throughput */}
+        {/* Throughput BarChart */}
         <div className="bg-[#0a0f18] border border-slate-800 rounded-xl p-4 shadow-inner flex flex-col">
           <div className="flex items-center gap-2 mb-2">
             <Cpu className="w-4 h-4 text-purple-500" />
@@ -279,7 +293,7 @@ export function SystemMonitor({
           </div>
         </div>
 
-        {/* Chart 3: Model Confidence */}
+        {/* Prediction Confidence LineChart */}
         <div className="bg-[#0a0f18] border border-slate-800 rounded-xl p-4 shadow-inner flex flex-col">
           <div className="flex items-center gap-2 mb-2">
             <Target className="w-4 h-4 text-emerald-500" />

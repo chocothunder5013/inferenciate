@@ -4,8 +4,25 @@ import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.GlobalEventExecutor;
 
+/**
+ * Main application entry point for the Inferenciate Manager node.
+ * <p>
+ * Responsible for bootstrapping core distributed system components:
+ * <ul>
+ *   <li>Initializes global WebSocket channel group for telemetry broadcasting.</li>
+ *   <li>Instantiates {@link ClusterClient} connection pool and {@link BatchScheduler} engine.</li>
+ *   <li>Configures worker discovery strategy (Kubernetes DNS resolution vs local single-node mode).</li>
+ *   <li>Launches Netty {@link APIGateway} listening on port 8080.</li>
+ * </ul>
+ * </p>
+ */
 public class ManagerNode {
 
+  /**
+   * Application bootstrap main method.
+   *
+   * @param args command-line arguments (unused; environment variables take precedence)
+   */
   public static void main(String[] args) {
     System.out.println("==================================================");
     System.out.println("  Starting Inferenciate Manager (Production Mode)");
@@ -17,17 +34,15 @@ public class ManagerNode {
       workerServiceName = "localhost";
     }
 
-    // --- NEW: Global WebSocket Group ---
-    // We create this at the top level so both the API and the Discovery service can use it!
+    // Shared ChannelGroup for broadcasting WebSocket telemetry events across services
     ChannelGroup activeWebSockets = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
 
-    // 2. Initialize the Core Engine
+    // Initialize core cluster client and batch scheduler engines
     ClusterClient clusterClient = new ClusterClient();
     BatchScheduler batchScheduler = new BatchScheduler(clusterClient);
 
-    // 3. Start Kubernetes DNS Discovery
+    // Configure worker node discovery strategy
     if (!workerServiceName.equals("localhost")) {
-      // UPDATED: Pass activeWebSockets here
       K8sDiscoveryService discoveryService =
           new K8sDiscoveryService(
               workerServiceName, clusterClient, batchScheduler, activeWebSockets);
@@ -36,9 +51,8 @@ public class ManagerNode {
       clusterClient.addNode("localhost");
     }
 
-    // 4. Start the HTTP API Gateway
+    // Start Netty HTTP API Gateway and WebSocket server listening on port 8080
     try {
-      // UPDATED: Pass activeWebSockets here as well
       APIGateway apiGateway = new APIGateway(8080, clusterClient, batchScheduler, activeWebSockets);
       apiGateway.start();
     } catch (Exception e) {

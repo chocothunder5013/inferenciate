@@ -10,11 +10,17 @@ import {
   Trash2,
 } from "lucide-react";
 
+/**
+ * Prediction outcome mapping structure.
+ */
 interface PredictionResult {
   label: string;
   confidence: number;
 }
 
+/**
+ * Internal state representation for a single image item in the upload batch queue.
+ */
 interface BatchItem {
   id: string;
   file: File;
@@ -24,11 +30,26 @@ interface BatchItem {
   error?: string;
 }
 
+/**
+ * Image Uploader component providing interactive batch selection and execution.
+ * <p>
+ * Supports:
+ * - Drag-and-drop file selection or traditional file dialog file picking.
+ * - Client-side image thumbnail preview generation (`URL.createObjectURL`).
+ * - Packaging pending image items into a single `multipart/form-data` payload.
+ * - Transmitting batch requests to the Manager API Gateway (`POST /api/batch`).
+ * - Real-time animated prediction overlay cards showing top classification label and confidence progress bar.
+ * </p>
+ */
 export function ImageUploader() {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Processes selected image files, filters non-image MIME types, generates object URL previews,
+   * and appends new pending items to the batch queue.
+   */
   const handleFiles = (selectedFiles: FileList | File[]) => {
     const newItems: BatchItem[] = Array.from(selectedFiles)
       .filter((file) => file.type.startsWith("image/"))
@@ -60,15 +81,20 @@ export function ImageUploader() {
     }
   }, []);
 
+  /** Removes a single item from the batch queue by its unique item ID. */
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  /** Clears all items from the preview queue and resets the HTML file input element. */
   const clearAll = () => {
     setItems([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  /**
+   * Asynchronously packages pending image items into a multipart FormData request and dispatches to POST /api/batch.
+   */
   const processBatch = async () => {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
     const pendingItems = items.filter(
@@ -77,7 +103,7 @@ export function ImageUploader() {
 
     if (pendingItems.length === 0) return;
 
-    // 1. Mark all pending items as uploading in the UI
+    // Transition pending items to uploading status
     setItems((prev) =>
       prev.map((i) =>
         pendingItems.find((p) => p.id === i.id)
@@ -87,25 +113,23 @@ export function ImageUploader() {
     );
 
     try {
-      // 2. Bundle all files into a single payload
+      // Package image binary payloads into a single multipart form payload
       const formData = new FormData();
       pendingItems.forEach((item) => {
-        // We use the unique item.id as the field name so the backend can track it
         formData.append(item.id, item.file);
       });
 
-      // 3. Fire the massive batch request
+      // Submit multipart batch request to the API Gateway
       const response = await fetch(`${apiUrl}/api/batch`, {
         method: "POST",
-        body: formData, // The browser handles the multipart/form-data boundaries automatically!
+        body: formData,
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      // We expect an array back: [{ id: "abc", label: "Cat", confidence: 0.99 }, ...]
       const results = await response.json();
 
-      // 4. Map the results back to the exact images using the ID
+      // Map incoming JSON prediction results back to image preview items using matching unique IDs
       setItems((prev) =>
         prev.map((item) => {
           const result = results.find((r: any) => r.id === item.id);
@@ -120,7 +144,6 @@ export function ImageUploader() {
         }),
       );
     } catch (err) {
-      // Mark anything still uploading as failed
       setItems((prev) =>
         prev.map((i) =>
           i.status === "uploading"
@@ -141,7 +164,7 @@ export function ImageUploader() {
 
   return (
     <div className="w-full flex flex-col gap-6">
-      {/* Hidden File Input */}
+      {/* Hidden file selector input element */}
       <input
         type="file"
         accept="image/*"
@@ -151,7 +174,7 @@ export function ImageUploader() {
         className="hidden"
       />
 
-      {/* Header & Global Controls */}
+      {/* Action control bar (Select Images, Execute Batch, Clear All) */}
       <div className="flex items-center justify-between">
         <div className="flex gap-3 w-full">
           <button
@@ -185,7 +208,7 @@ export function ImageUploader() {
         </div>
       </div>
 
-      {/* Drop Zone (Only shows prominently if no items, otherwise stays as a small target) */}
+      {/* Interactive drag-and-drop dropzone target */}
       <AnimatePresence>
         {items.length === 0 && (
           <motion.div
@@ -211,7 +234,7 @@ export function ImageUploader() {
         )}
       </AnimatePresence>
 
-      {/* Results Gallery Grid */}
+      {/* Image thumbnail grid with live prediction overlays */}
       {items.length > 0 && (
         <motion.div
           layout
@@ -233,7 +256,7 @@ export function ImageUploader() {
                   className="object-cover w-full h-full opacity-50 group-hover:opacity-30 transition-opacity"
                 />
 
-                {/* Remove Button */}
+                {/* Remove item trigger button */}
                 {(item.status === "pending" || item.status === "error") && (
                   <button
                     onClick={() => removeItem(item.id)}
@@ -243,7 +266,7 @@ export function ImageUploader() {
                   </button>
                 )}
 
-                {/* Status Overlay */}
+                {/* Prediction status and outcome overlay */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center">
                   {item.status === "uploading" && (
                     <Loader2 className="w-8 h-8 text-grid-neon animate-spin" />
@@ -270,7 +293,7 @@ export function ImageUploader() {
                           {item.result.label}
                         </p>
 
-                        {/* Mini Confidence Bar */}
+                        {/* Prediction confidence progress bar */}
                         <div className="w-full bg-slate-800 rounded-full h-1 mt-2">
                           <motion.div
                             initial={{ width: 0 }}

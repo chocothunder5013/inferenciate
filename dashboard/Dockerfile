@@ -4,5 +4,6 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 EXPOSE 5173
-# Run Vite host mode so it maps to Docker ports
+
+# Launch Vite development server bound to all network interfaces for container port mapping
 CMD ["npm", "run", "dev", "--", "--host"]

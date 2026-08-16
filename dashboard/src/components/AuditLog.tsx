@@ -2,10 +2,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { List, ShieldCheck, ShieldAlert, Clock, Zap } from "lucide-react";
 import type { RealTelemetry } from "../types";
 
+/**
+ * Audit Log tabular visualization component.
+ * <p>
+ * Displays a real-time, scrollable audit feed of recent inference job executions.
+ * Renders per-job metadata including timestamp, truncated job UUID, handling worker node IP,
+ * predicted class label, confidence percentage badge (highlighted green for >=80% confidence),
+ * and execution latency in milliseconds.
+ * </p>
+ *
+ * @param logs array of recent RealTelemetry events (max 50 items)
+ */
 export function AuditLog({ logs }: { logs: RealTelemetry[] }) {
   return (
     <div className="bg-[#0a0f18] border border-slate-800 rounded-xl shadow-inner flex flex-col h-[400px] overflow-hidden">
-      {/* Header */}
+      {/* Component header bar */}
       <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-[#0f172a]/50">
         <div className="flex items-center gap-2">
           <List className="text-slate-400 w-5 h-5" />
@@ -18,7 +29,7 @@ export function AuditLog({ logs }: { logs: RealTelemetry[] }) {
         </div>
       </div>
 
-      {/* Table Container */}
+      {/* Audit log scrollable table container */}
       <div className="flex-grow overflow-auto custom-scrollbar relative">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-[#0f172a] z-10 shadow-md">
@@ -53,7 +64,7 @@ export function AuditLog({ logs }: { logs: RealTelemetry[] }) {
                 </tr>
               ) : (
                 logs.map((log, i) => {
-                  // Fallbacks for missing data
+                  // Extract truncated job ID and fallback display values
                   const jobId = log.jobId
                     ? log.jobId.substring(0, 8)
                     : "unknown";

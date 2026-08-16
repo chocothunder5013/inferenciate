@@ -18,13 +18,33 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * Netty inbound channel handler for decoding HTTP REST API inference requests.
+ * <p>
+ * Routes HTTP endpoints:
+ * <ul>
+ *   <li>{@code POST /api/job}: Accepts raw binary image byte stream payloads (application/octet-stream).</li>
+ *   <li>{@code POST /api/batch}: Accepts multipart/form-data multi-image batch submissions.</li>
+ *   <li>{@code OPTIONS}: Responds with HTTP CORS headers for preflight browser checks.</li>
+ *   <li>{@code /ws}: Passes WebSocket handshake frames down the Netty pipeline.</li>
+ * </ul>
+ * Upon completing inference, updates are dispatched back to HTTP clients and broadcasted via WebSocket
+ * onto the Netty I/O event loop thread pool.
+ * </p>
+ */
 public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
   private final ClusterClient clusterClient;
   private final BatchScheduler scheduler;
   private final ChannelGroup activeWebSockets;
 
-  // UPDATED: Proper dependency injection, no static singletons!
+  /**
+   * Constructs a new HttpJobHandler bound to cluster dependencies and WebSocket connection pool.
+   *
+   * @param clusterClient gRPC cluster client connection manager
+   * @param scheduler dynamic batch scheduler instance
+   * @param activeWebSockets group of connected WebSocket channel instances for telemetry broadcast
+   */
   public HttpJobHandler(
       ClusterClient clusterClient, BatchScheduler scheduler, ChannelGroup activeWebSockets) {
     this.clusterClient = clusterClient;
@@ -34,26 +54,36 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
+    // Forward WebSocket endpoint requests down the pipeline for WebSocketServerProtocolHandler
     if (req.uri().startsWith("/ws")) {
       ctx.fireChannelRead(req.retain());
       return;
     }
 
+    // Intercept CORS preflight OPTIONS requests from browser clients
     if (req.method().equals(HttpMethod.OPTIONS)) {
       sendCorsResponse(ctx);
       return;
     }
 
+    // Route POST requests to designated handler methods
     if (req.method().equals(HttpMethod.POST) && req.uri().equals("/api/job")) {
       handleJobSubmission(ctx, req);
     } else if (req.method().equals(HttpMethod.POST) && req.uri().equals("/api/batch")) {
-      // NEW: Route to the batch handler
       handleBatchSubmission(ctx, req);
     } else {
       sendResponse(ctx, "", HttpResponseStatus.NOT_FOUND);
     }
   }
 
+  /**
+   * Processes single image payload submissions at POST /api/job.
+   * Reads raw bytes, constructs a gRPC InferenceRequest, resolves worker IP via consistent hashing,
+   * submits request to BatchScheduler, and enforces a 30-second execution SLA timeout.
+   *
+   * @param ctx Netty channel context for sending response
+   * @param req incoming full HTTP request object
+   */
   private void handleJobSubmission(ChannelHandlerContext ctx, FullHttpRequest req) {
     long startTime = System.currentTimeMillis();
     String jobId = "job-" + java.util.UUID.randomUUID().toString();
@@ -96,15 +126,13 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
                   return;
                 }
 
-                // FIX #4: Shift the response writing back to Netty's thread
+                // Dispatch HTTP response and WebSocket event on Netty event loop thread for thread safety
                 ctx.executor()
                     .execute(
                         () -> {
                           if (activeWebSockets != null) {
                             int queueDepth = scheduler.getQueueDepth(workerIp);
 
-                            // FIX #1: Added java.util.Locale.US to prevent comma-decimal JSON
-                            // crashes
                             String wsJson =
                                 String.format(
                                     java.util.Locale.US,
@@ -121,7 +149,6 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
                             activeWebSockets.writeAndFlush(new TextWebSocketFrame(wsJson));
                           }
 
-                          // FIX #1: Added java.util.Locale.US here as well
                           String resultJson =
                               String.format(
                                   java.util.Locale.US,
@@ -139,6 +166,13 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
     }
   }
 
+  /**
+   * Encodes and writes formatted JSON HTTP responses to the Netty channel pipeline.
+   *
+   * @param ctx Netty channel handler context
+   * @param json response payload body string
+   * @param status HTTP response status code
+   */
   private void sendResponse(ChannelHandlerContext ctx, String json, HttpResponseStatus status) {
     FullHttpResponse response =
         new DefaultFullHttpResponse(
@@ -150,31 +184,46 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
     ctx.writeAndFlush(response);
   }
 
+  /**
+   * Handles HTTP OPTIONS preflight request by returning empty 200 OK response with CORS headers.
+   *
+   * @param ctx Netty channel context
+   */
   private void sendCorsResponse(ChannelHandlerContext ctx) {
     FullHttpResponse response =
         new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
     enableCors(response);
 
-    // NEW: Tell the browser the response is complete!
     response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
 
-    // Flush and cleanly close the preflight channel
     ctx.writeAndFlush(response).addListener(io.netty.channel.ChannelFutureListener.CLOSE);
   }
 
+  /**
+   * Appends Cross-Origin Resource Sharing (CORS) headers to outgoing HTTP responses.
+   *
+   * @param response Netty FullHttpResponse object
+   */
   private void enableCors(FullHttpResponse response) {
     response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
     response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS");
     response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type");
   }
 
+  /**
+   * Processes multipart/form-data batch image submissions at POST /api/batch.
+   * Uses Netty {@link HttpPostRequestDecoder} to extract file uploads, builds a BatchInferenceRequest,
+   * routes to a C++ worker node, and enforces a 60-second SLA timeout.
+   *
+   * @param ctx Netty channel context
+   * @param req incoming full HTTP request object containing multipart form body
+   */
   private void handleBatchSubmission(ChannelHandlerContext ctx, FullHttpRequest req) {
     String batchId = "batch-" + java.util.UUID.randomUUID().toString();
     inference.BatchInferenceRequest.Builder batchBuilder =
         inference.BatchInferenceRequest.newBuilder().setBatchId(batchId);
 
     try {
-      // Initialize Netty's multipart decoder
       HttpPostRequestDecoder decoder =
           new HttpPostRequestDecoder(new DefaultHttpDataFactory(false), req);
 
@@ -182,13 +231,11 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
         if (data.getHttpDataType() == InterfaceHttpData.HttpDataType.FileUpload) {
           FileUpload fileUpload = (FileUpload) data;
           if (fileUpload.isCompleted()) {
-
-            // The frontend attached the React item.id as the field name!
             String frontendImageId = fileUpload.getName();
 
             inference.InferenceRequest singleReq =
                 inference.InferenceRequest.newBuilder()
-                    .setRequestId(frontendImageId) // Crucial for mapping results back to the UI
+                    .setRequestId(frontendImageId)
                     .setImageData(com.google.protobuf.ByteString.copyFrom(fileUpload.get()))
                     .build();
 
@@ -205,7 +252,6 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
 
       String workerIp = clusterClient.getWorkerIp(batchId);
 
-      // IMPORTANT: You will need to make sure BatchScheduler has a submitBatch() method!
       CompletableFuture<inference.BatchInferenceResponse> future =
           (CompletableFuture<inference.BatchInferenceResponse>)
               scheduler.submitBatch(workerIp, batchBuilder.build());
@@ -225,18 +271,12 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
                             return;
                           }
 
-                          // 1. Get current queue depth for the telemetry
                           int queueDepth = scheduler.getQueueDepth(workerIp);
-
-                          // 2. Build the HTTP JSON response AND broadcast to WebSockets
-                          // simultaneously
                           StringBuilder jsonBuilder = new StringBuilder("[");
 
                           for (int i = 0; i < grpcResp.getResponsesCount(); i++) {
                             inference.InferenceResponse r = grpcResp.getResponses(i);
 
-                            // --- NEW: Broadcast each result to the React Dashboard via WebSocket
-                            // ---
                             if (activeWebSockets != null) {
                               String wsJson =
                                   String.format(
@@ -253,9 +293,7 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
                                       r.getConfidenceScore() * 100);
                               activeWebSockets.writeAndFlush(new TextWebSocketFrame(wsJson));
                             }
-                            // -----------------------------------------------------------------------
 
-                            // Append to the HTTP response
                             jsonBuilder.append(
                                 String.format(
                                     java.util.Locale.US,
@@ -268,7 +306,6 @@ public class HttpJobHandler extends SimpleChannelInboundHandler<FullHttpRequest>
                           }
                           jsonBuilder.append("]");
 
-                          // 3. Send the final HTTP response to the Image Uploader
                           sendResponse(ctx, jsonBuilder.toString(), HttpResponseStatus.OK);
                         });
               });

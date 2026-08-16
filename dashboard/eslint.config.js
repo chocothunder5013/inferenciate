@@ -5,6 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+// ESLint configuration for React and TypeScript environment rules
 export default defineConfig([
   globalIgnores(['dist']),
   {
@@ -21,3 +22,4 @@ export default defineConfig([
     },
   },
 ])
+

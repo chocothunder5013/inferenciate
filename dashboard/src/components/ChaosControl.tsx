@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import { Flame, Settings2, Activity, XOctagon } from "lucide-react";
 
+/**
+ * Chaos Control synthetic load generator component.
+ * <p>
+ * Generates continuous synthetic HTTP POST requests against the API Gateway endpoint (`/api/job`)
+ * using a minimal 1x1 byte-array PNG payload. Enables dynamic stress testing of cluster batching,
+ * worker load distribution, queue depth build-up, and auto-scaling mechanisms under customizable load (1-50 RPS).
+ * </p>
+ */
 export function ChaosControl() {
   const [isTesting, setIsTesting] = useState(false);
   const [rps, setRps] = useState(10);
   const [stats, setStats] = useState({ sent: 0, success: 0, failed: 0 });
   const intervalRef = useRef<number | null>(null);
 
-  // A tiny 1x1 transparent PNG in memory so we don't need real files
+  // In-memory 1x1 transparent PNG byte array payload used for synthetic load testing requests
   const dummyImage = new Uint8Array([
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
     0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120,
@@ -15,6 +23,9 @@ export function ChaosControl() {
     174, 66, 96, 130,
   ]);
 
+  /**
+   * Dispatches a single synthetic image POST request to /api/job and updates stress counters.
+   */
   const fireRequest = async () => {
     setStats((prev) => ({ ...prev, sent: prev.sent + 1 }));
     try {
@@ -34,11 +45,13 @@ export function ChaosControl() {
     }
   };
 
+  /**
+   * Starts the synthetic request generation loop based on configured requests per second (RPS).
+   */
   const startChaos = () => {
     setIsTesting(true);
     setStats({ sent: 0, success: 0, failed: 0 });
 
-    // Calculate interval in milliseconds based on Requests Per Second
     const msPerRequest = 1000 / rps;
 
     intervalRef.current = window.setInterval(() => {
@@ -46,6 +59,9 @@ export function ChaosControl() {
     }, msPerRequest);
   };
 
+  /**
+   * Stops active request generation timers and resets control state.
+   */
   const stopChaos = () => {
     setIsTesting(false);
     if (intervalRef.current !== null) {
@@ -54,7 +70,7 @@ export function ChaosControl() {
     }
   };
 
-  // Cleanup on unmount
+  // Clear active load generation timers on component unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current !== null) {
@@ -63,10 +79,9 @@ export function ChaosControl() {
     };
   }, []);
 
-  // Make sure to remove the early return! The JSX must be returned by the component.
   return (
     <div className="bg-[#1a0b14] border border-rose-900/50 rounded-xl p-6 shadow-[0_0_30px_rgba(225,29,72,0.1)] relative overflow-hidden group">
-      {/* Warning Stripes Background */}
+      {/* Background hazard warning pattern */}
       <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#e11d48_10px,#e11d48_20px)] pointer-events-none"></div>
 
       <div className="relative z-10">
@@ -85,7 +100,7 @@ export function ChaosControl() {
         </div>
 
         <div className="space-y-6">
-          {/* Slider Control */}
+          {/* Target load rate slider (1 - 50 RPS) */}
           <div>
             <div className="flex justify-between text-xs font-mono text-slate-400 mb-2">
               <span className="flex items-center gap-1">
@@ -104,7 +119,7 @@ export function ChaosControl() {
             />
           </div>
 
-          {/* Action Button */}
+          {/* Test execution trigger buttons */}
           {!isTesting ? (
             <button
               onClick={startChaos}
@@ -121,7 +136,7 @@ export function ChaosControl() {
             </button>
           )}
 
-          {/* Live Stats */}
+          {/* Real-time stress metrics summary */}
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-rose-900/30">
             <div className="text-center">
               <div className="text-[10px] text-slate-500 font-mono uppercase">

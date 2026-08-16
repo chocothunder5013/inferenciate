@@ -11,16 +11,32 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * Service that periodically polls Kubernetes headless service DNS records to discover active C++ worker Pods.
+ * <p>
+ * Performs periodic DNS A/AAAA record queries against the Kubernetes internal DNS resolver (e.g. CoreDNS)
+ * for the designated Headless Service domain ({@code workerServiceName}). Dynamically registers newly discovered
+ * Pod IP addresses into the consistent hash ring and removes dead/scaled-down Pod IPs while broadcasting live
+ * topology update events over WebSockets to connected UI dashboards.
+ * </p>
+ */
 public class K8sDiscoveryService {
   private final String workerServiceName;
   private final ClusterClient clusterClient;
   private final BatchScheduler batchScheduler;
-  private final ChannelGroup activeWebSockets; // Added!
+  private final ChannelGroup activeWebSockets;
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
   private Set<String> activeWorkers = new HashSet<>();
 
-  // Updated Constructor
+  /**
+   * Constructs a new K8sDiscoveryService instance bound to target cluster components.
+   *
+   * @param workerServiceName Kubernetes headless service DNS hostname
+   * @param clusterClient cluster client connection pool manager
+   * @param batchScheduler dynamic batching scheduler
+   * @param activeWebSockets group of connected WebSocket client channels
+   */
   public K8sDiscoveryService(
       String workerServiceName,
       ClusterClient clusterClient,
@@ -32,12 +48,16 @@ public class K8sDiscoveryService {
     this.activeWebSockets = activeWebSockets;
   }
 
+  /**
+   * Starts periodic background DNS resolution polling (every 5 seconds) to track worker Pod lifecycle changes.
+   */
   public void start() {
     System.out.println("[Discovery] Starting K8s DNS polling for service: " + workerServiceName);
 
     scheduler.scheduleAtFixedRate(
         () -> {
           try {
+            // Perform DNS A-record resolution returning IP addresses for all running worker Pods
             InetAddress[] addresses = InetAddress.getAllByName(workerServiceName);
             Set<String> currentWorkers = new HashSet<>();
 
@@ -45,10 +65,9 @@ public class K8sDiscoveryService {
               currentWorkers.add(addr.getHostAddress());
             }
 
-            // Define the boolean outside the loops!
             boolean topologyChanged = false;
 
-            // 1. Find NEW workers
+            // Register newly discovered worker nodes in hash ring and client connection pool
             for (String ip : currentWorkers) {
               if (!activeWorkers.contains(ip)) {
                 System.out.println("[Discovery] New Worker Pod discovered: " + ip);
@@ -57,20 +76,19 @@ public class K8sDiscoveryService {
               }
             }
 
-            // 2. Find DEAD workers
+            // Remove unreachable or scaled-down worker nodes from hash ring and scheduler queues
             for (String ip : activeWorkers) {
               if (!currentWorkers.contains(ip)) {
                 System.err.println("[Discovery] Worker Pod died/scaled down: " + ip);
                 clusterClient.removeNode(ip);
-                batchScheduler.removeWorker(ip); // Flush queue safely!
+                batchScheduler.removeWorker(ip);
                 topologyChanged = true;
               }
             }
 
-            // Update state
             activeWorkers = currentWorkers;
 
-            // 3. Broadcast to React Dashboard
+            // Broadcast topology state updates to connected WebSocket dashboard clients when node list changes
             if (topologyChanged && activeWebSockets != null && !activeWebSockets.isEmpty()) {
               String workersJsonArray =
                   activeWorkers.stream()

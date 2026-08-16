@@ -4,11 +4,22 @@ import { Server, Cpu, Database } from "lucide-react";
 import type { RealTelemetry } from "../types";
 
 interface ClusterTopologyProps {
+  /** Latest incoming telemetry event (topology update or inference result). */
   latestEvent: RealTelemetry | null;
+  /** Currently selected worker node IP string for filtering telemetry graphs. */
   selectedWorker: string | null;
+  /** Callback fired when user clicks a worker node card to toggle selection filter. */
   onSelectWorker: (workerId: string | null) => void;
 }
 
+/**
+ * Cluster Topology visualization component.
+ * <p>
+ * Displays live topology map of the Inferenciate cluster including the central Manager Node
+ * and active C++ Worker Nodes. Renders dynamic SVG interconnect wires, pulses worker cards upon
+ * job receipt (800ms visual flash timer), and supports interactive node selection for filtering telemetry metrics.
+ * </p>
+ */
 export function ClusterTopology({
   latestEvent,
   selectedWorker,
@@ -17,7 +28,7 @@ export function ClusterTopology({
   const [activeNodes, setActiveNodes] = useState<Record<string, boolean>>({});
   const [liveWorkers, setLiveWorkers] = useState<string[]>([]);
 
-  // FIX 1: Track independent timers for each worker so they don't cancel each other out
+  // Per-worker pulse timers for visual activity indication
   const blinkTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -32,19 +43,18 @@ export function ClusterTopology({
       const node = latestEvent.workerNode;
       setActiveNodes((prev) => ({ ...prev, [node]: true }));
 
-      // Clear only this specific node's previous timer, if any
       if (blinkTimers.current[node]) {
         clearTimeout(blinkTimers.current[node]);
       }
 
-      // Set a new timer to turn it off after 800ms
+      // Pulse active worker node card visually for 800ms upon job completion
       blinkTimers.current[node] = setTimeout(() => {
         setActiveNodes((prev) => ({ ...prev, [node]: false }));
       }, 800);
     }
   }, [latestEvent]);
 
-  // Clean up all timers if the component unmounts
+  // Clean up activity pulse timers on component unmount
   useEffect(() => {
     return () => {
       Object.values(blinkTimers.current).forEach(clearTimeout);
@@ -53,6 +63,7 @@ export function ClusterTopology({
 
   return (
     <div className="bg-[#0a0f18] border border-slate-800 rounded-xl p-4 shadow-inner h-full flex flex-col relative overflow-hidden group">
+      {/* Header bar displaying active node count and filter clear trigger */}
       <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-2">
         <div className="flex items-center gap-2">
           <Database className="text-slate-400 w-4 h-4" />
@@ -76,8 +87,9 @@ export function ClusterTopology({
         </AnimatePresence>
       </div>
 
-      {/* FIX 3: Added overflow-x-auto and min-w-full to handle horizontal scaling properly */}
+      {/* Dynamic SVG interconnect wiring and active worker topology layout */}
       <div className="flex-grow flex flex-col items-center justify-center gap-8 relative overflow-x-auto pb-4">
+        {/* Manager Node visual badge */}
         <motion.div
           animate={{
             boxShadow: [
@@ -95,6 +107,7 @@ export function ClusterTopology({
           </span>
         </motion.div>
 
+        {/* SVG connection lines linking Manager node to dynamically placed worker node cards */}
         <div className="absolute top-[30%] left-0 w-full h-[40%] flex justify-center -z-0 opacity-20 pointer-events-none min-w-full">
           <svg width="100%" height="100%" preserveAspectRatio="none">
             {liveWorkers.map((workerId, index) => {
@@ -118,7 +131,7 @@ export function ClusterTopology({
           </svg>
         </div>
 
-        {/* FIX 3 part 2: flex-nowrap keeps them in a single line so the wires line up */}
+        {/* Worker node interactive cards */}
         <div className="flex items-center justify-center gap-4 min-w-full z-10 flex-nowrap">
           {liveWorkers.length === 0 ? (
             <span className="text-slate-500 font-mono text-xs animate-pulse">
@@ -135,7 +148,6 @@ export function ClusterTopology({
                 <motion.button
                   key={workerId}
                   onClick={() => onSelectWorker(isSelected ? null : workerId)}
-                  // FIX 2: Restored the actual animation properties!
                   animate={{
                     scale: isSelected ? 1.1 : 1,
                     opacity: isDimmed ? 0.4 : 1,

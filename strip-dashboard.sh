@@ -1,24 +1,27 @@
 #!/bin/bash
 
-# Exit immediately if a command fails
+# ==============================================================================
+# Inferenciate Dashboard Comment Stripper Script
+# ==============================================================================
+# Strips comments from TypeScript (.ts, .tsx) source files in the dashboard
+# directory using decomment-cli, followed by Prettier formatting. Useful for
+# minification testing and clean asset builds.
+# ==============================================================================
+
+# Exit immediately on failure
 set -e
 
-echo "========================================="
-echo "   Dashboard Comment Sanitizer  "
-echo "========================================="
+echo "Starting dashboard comment removal..."
 
 cd dashboard
 
-# Find all TS and TSX files in the src directory and process them safely
-find src -type f \( -name "*.ts" -o -name "*.tsx" \) | while read file; do
-  echo "Stripping $file..."
-  # Use npx to dynamically pull the decomment AST tool, process the file, and overwrite it
+# Strip comments from TypeScript source files in src directory
+find src -type f \( -name "*.ts" -o -name "*.tsx" \) | while read -r file; do
+  echo "Processing $file..."
   npx -y decomment-cli "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 done
 
-# Run Prettier one last time to fix any weird blank lines left behind by deleted comments
+# Format modified files with Prettier
 npx prettier --write "src/**/*.{ts,tsx}"
 
-echo "========================================="
-echo " Dashboard is now pristine and comment-free!"
-echo "========================================="
+echo "Dashboard comments stripped and files formatted successfully."

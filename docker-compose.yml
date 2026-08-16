@@ -1,43 +1,64 @@
+# ==============================================================================
+# Inferenciate Container Orchestration (Docker Compose Specification v3.8)
+# ==============================================================================
+# Defines multi-container development and production environment:
+# 1. Manager Node: Java Netty API Gateway & Dynamic Batch Scheduler (Port 8080)
+# 2. Worker Node: Native C++ ONNX Runtime Engine & gRPC Server (Port 50051)
+# 3. Dashboard: React 18 / Vite Telemetry & Monitoring Web Interface (Port 5173)
+# ==============================================================================
+
 version: "3.8"
 
 services:
-  # 1. The Brain (Java Manager)
+  # ----------------------------------------------------------------------------
+  # Java Netty API Gateway & Dynamic Batch Manager Node
+  # ----------------------------------------------------------------------------
   manager:
     build:
-      context: . # <-- CHANGED TO ROOT
-      dockerfile: manager/Dockerfile # <-- ADDED
+      context: .
+      dockerfile: manager/Dockerfile
     ports:
       - "8080:8080"
     environment:
+      # Target hostname for internal container network worker resolution
       - WORKER_SERVICE_NAME=worker
     depends_on:
       - worker
     networks:
       - grid-net
 
-  # 2. The Muscle (C++ Worker)
+  # ----------------------------------------------------------------------------
+  # High-Performance C++ Inference Worker Node (ONNX Runtime + gRPC)
+  # ----------------------------------------------------------------------------
   worker:
     build:
-      context: . # <-- CHANGED TO ROOT
-      dockerfile: worker/Dockerfile # <-- ADDED
+      context: .
+      dockerfile: worker/Dockerfile
     ports:
       - "50051:50051"
     volumes:
+      # Mount host ONNX model artifacts directory into container at /models
       - ./models:/models
     networks:
       - grid-net
 
-  # 3. The Dashboard (React/Vite)
+  # ----------------------------------------------------------------------------
+  # Web Dashboard Monitoring & Telemetry Interface (React, Vite, WebSockets)
+  # ----------------------------------------------------------------------------
   dashboard:
     build:
-      context: ./dashboard # <-- Stays the same (doesn't need protos)
+      context: ./dashboard
     ports:
       - "5173:5173"
     environment:
+      # Manager API Gateway target URL for HTTP endpoints and WebSockets
       - VITE_API_URL=http://localhost:8080
     networks:
       - grid-net
 
+# ------------------------------------------------------------------------------
+# Isolated Bridge Network for Inter-Container Communication
+# ------------------------------------------------------------------------------
 networks:
   grid-net:
     driver: bridge

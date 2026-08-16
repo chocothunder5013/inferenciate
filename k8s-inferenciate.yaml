@@ -1,12 +1,24 @@
-# -------------------------------------------------
-# 1. The Headless Service (For K8s DNS Discovery)
-# -------------------------------------------------
+# ==============================================================================
+# Inferenciate Kubernetes Manifest Specification
+# ==============================================================================
+# Enterprise Kubernetes deployment topology:
+# 1. Headless Worker Service: Enables DNS A-record discovery of individual C++ Pod IPs.
+# 2. C++ Worker Deployment: Scalable inference pool running ONNX Runtime gRPC workers.
+# 3. Java Manager Deployment: Asynchronous Netty API Gateway with dynamic batching.
+# 4. Public LoadBalancer Service: External ingress point mapping port 80 to port 8080.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Headless Worker Service (Enables K8s Internal DNS A-Record Discovery)
+# ------------------------------------------------------------------------------
 apiVersion: v1
 kind: Service
 metadata:
   name: inferenciate-worker-headless
 spec:
-  clusterIP: None # This makes it "Headless" - K8s returns Pod IPs directly
+  # Setting clusterIP: None configures a Headless Service.
+  # CoreDNS returns individual Pod IP addresses upon DNS query instead of a single virtual IP.
+  clusterIP: None
   selector:
     app: inferenciate-worker
   ports:
@@ -14,15 +26,16 @@ spec:
       port: 50051
 
 ---
-# -------------------------------------------------
-# 2. Worker Deployment (The C++ Muscle)
-# -------------------------------------------------
+# ------------------------------------------------------------------------------
+# 2. Worker Deployment (C++ ONNX Inference Engine Pod Pool)
+# ------------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inferenciate-worker-cluster
 spec:
-  replicas: 3 # Scale this up to handle more image throughput
+  # Scale worker replica count to expand cluster tensor inference processing capacity
+  replicas: 3
   selector:
     matchLabels:
       app: inferenciate-worker
@@ -38,23 +51,25 @@ spec:
           ports:
             - containerPort: 50051
           resources:
+            # Memory and CPU resource allocations required for ONNX Runtime tensor execution
             requests:
               cpu: "1000m"
               memory: "1Gi"
-            limits: # C++ ONNX will use exactly what you give it
+            limits:
               cpu: "2000m"
               memory: "2Gi"
 
 ---
-# -------------------------------------------------
-# 3. Manager Deployment (The Java Brain)
-# -------------------------------------------------
+# ------------------------------------------------------------------------------
+# 3. Manager Deployment (Java Netty API Gateway & Batch Scheduler)
+# ------------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inferenciate-manager-cluster
 spec:
-  replicas: 2 # Scale this up to handle more HTTP traffic
+  # Scale manager replicas to handle high incoming HTTP client traffic
+  replicas: 2
   selector:
     matchLabels:
       app: inferenciate-manager
@@ -71,12 +86,13 @@ spec:
             - containerPort: 8080
           env:
             - name: WORKER_SERVICE_NAME
-              value: "inferenciate-worker-headless" # Matches the Headless Service name above
+              # Points to the headless worker service name for Kubernetes DNS lookup
+              value: "inferenciate-worker-headless"
 
 ---
-# -------------------------------------------------
-# 4. Public API Gateway (Load Balancer)
-# -------------------------------------------------
+# ------------------------------------------------------------------------------
+# 4. Public API Gateway Service (External Load Balancer Ingress)
+# ------------------------------------------------------------------------------
 apiVersion: v1
 kind: Service
 metadata:
